@@ -14,7 +14,6 @@
 - **Contract Address (Sepolia):** [`0xF48e84897C92387dc11b08058511BD3cc2B3B9c7`](https://sepolia.etherscan.io/address/0xF48e84897C92387dc11b08058511BD3cc2B3B9c7)
 - **Deployment Block:** `12039018`
 - **Sepolia Etherscan Explorer:** [https://sepolia.etherscan.io/address/0xF48e84897C92387dc11b08058511BD3cc2B3B9c7](https://sepolia.etherscan.io/address/0xF48e84897C92387dc11b08058511BD3cc2B3B9c7)
-- **Stitch Project ID:** `7791138313881414611` (Treasury Monolith Brutalist Design System)
 
 ---
 
