@@ -2,41 +2,39 @@ import React from "react";
 
 export default function Navigation({ activeTab, setActiveTab }) {
   const tabs = [
-    { id: "dashboard", label: "DASH", icon: "grid_view" },
-    { id: "membership", label: "MEMBERS", icon: "shield_person" },
-    { id: "proposals", label: "PROPOSALS", icon: "ballot" },
-    { id: "new-allocation", label: "NEW", icon: "add_box" },
-    { id: "ledger", label: "LEDGER", icon: "receipt_long" },
+    { id: "pot", label: "Pot" },
+    { id: "requests", label: "Requests" },
+    { id: "new", label: "New Request" },
+    { id: "notebook", label: "Notebook" },
   ];
 
   return (
-    <nav className="fixed bottom-0 md:top-16 md:bottom-auto w-full z-40 bg-surface border-t md:border-t-0 md:border-b border-surface-variant">
-      <div className="max-w-6xl mx-auto">
-        <div className="grid grid-cols-5 h-16 w-full">
+    <footer className="fixed bottom-0 inset-x-0 z-50 bg-surface/90 backdrop-blur-md border-t border-outline-variant/30 py-3">
+      <div className="max-w-[580px] mx-auto px-6">
+        <nav className="flex items-center justify-around">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center justify-center min-h-[44px] transition-none border-r last:border-r-0 border-surface-variant ${
+                className={`py-1 px-3 flex flex-col items-center transition-colors font-body text-xs tracking-wider uppercase ${
                   isActive
-                    ? "bg-primary text-white"
-                    : "bg-surface text-ink hover:text-primary active:bg-surface-container"
+                    ? "text-primary font-semibold"
+                    : "text-on-surface-variant hover:text-primary"
                 }`}
               >
-                <span className="material-symbols-outlined text-[20px]">
-                  {tab.icon}
-                </span>
-                <span className="font-mono text-[11px] uppercase tracking-wider mt-1 font-bold">
-                  {tab.label}
-                </span>
+                <span>{tab.label}</span>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full mt-1 transition-all ${
+                    isActive ? "bg-secondary-container opacity-100" : "opacity-0"
+                  }`}
+                />
               </button>
             );
           })}
-        </div>
+        </nav>
       </div>
-    </nav>
+    </footer>
   );
 }
-
