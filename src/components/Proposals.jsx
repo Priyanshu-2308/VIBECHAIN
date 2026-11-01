@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { ethers } from "ethers";
+import ThreeMonolith from "./ThreeMonolith.jsx";
 import { getSignerContract, checkAndSwitchNetwork } from "../utils/ethereum.js";
+
+const STATUS_LABELS = ["ACTIVE", "PASSED", "REJECTED", "EXPIRED", "EXECUTED"];
 
 export default function Proposals({
   proposals = [],
@@ -11,12 +14,10 @@ export default function Proposals({
   onConnect,
 }) {
   const [selectedId, setSelectedId] = useState(proposals.length > 0 ? proposals[0].id : null);
-  const [showArchive, setShowArchive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [toast, setToast] = useState("");
 
-  const activeProposal = proposals.find((p) => p.statusCode === 0) || proposals[0];
-  const currentProposal = proposals.find((p) => p.id === selectedId) || activeProposal;
+  const currentProposal = proposals.find((p) => p.id === selectedId) || proposals[0];
 
   const handleVote = async (support) => {
     if (!account) return onConnect();
@@ -24,19 +25,19 @@ export default function Proposals({
 
     try {
       setIsLoading(true);
-      setMsg("Recording your show of hands...");
+      setToast("Requesting vote signature...");
       await checkAndSwitchNetwork();
 
       const contract = await getSignerContract();
       const tx = await contract.vote(currentProposal.id, support);
-      setMsg(`Vote broadcast: ${tx.hash.slice(0, 10)}...`);
+      setToast(`Vote transaction dispatched: ${tx.hash.slice(0, 10)}...`);
       await tx.wait(1);
 
-      setMsg(`Your hand has been recorded gently (${support ? "Yes" : "Pass"}).`);
+      setToast(`Vote cast: ${support ? "YES" : "NO"} on Proposal #${currentProposal.id}`);
       await onRefresh();
     } catch (err) {
       console.error(err);
-      setMsg(`Vote failed: ${err.reason || err.message}`);
+      setToast(`Vote Failed: ${err.reason || err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -48,260 +49,263 @@ export default function Proposals({
 
     try {
       setIsLoading(true);
-      setMsg("Releasing collective funds...");
+      setToast("Broadcasting permissionless execution call...");
       await checkAndSwitchNetwork();
 
       const contract = await getSignerContract();
       const tx = await contract.execute(currentProposal.id);
-      setMsg(`Outflow dispatched: ${tx.hash.slice(0, 10)}...`);
+      setToast(`Execution tx dispatched: ${tx.hash.slice(0, 10)}...`);
       await tx.wait(1);
 
-      setMsg("Funds released to recipient! The request is settled.");
+      setToast(`PROPOSAL #${currentProposal.id} EXECUTED ON-CHAIN! Funds routed to recipient.`);
       await onRefresh();
     } catch (err) {
       console.error(err);
-      setMsg(`Execution failed: ${err.reason || err.message}`);
+      setToast(`Execution Failed: ${err.reason || err.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Check if member joined after proposal createdAt
   const cannotVoteReason = () => {
-    if (!account) return "Connect wallet to participate.";
-    if (!isMember) return "Only active members at the table can vote.";
+    if (!account) return "Wallet not connected. Connect to vote.";
+    if (!isMember) return "Only active club members can vote on proposals.";
     if (!currentProposal) return "";
     if (joinedTimestamp && BigInt(joinedTimestamp) >= BigInt(currentProposal.createdAt)) {
-      return "Joined after this request was placed on the table (snapshot voting rule).";
+      return `Wallet joined at timestamp ${joinedTimestamp}, which is after proposal snapshot (${currentProposal.createdAt}). Antigravity snapshot voting rules prohibit retroactive voting.`;
     }
     if (currentProposal.statusCode !== 0) {
-      return `Decision window closed (Status: ${currentProposal.statusText}).`;
+      return `Voting period has ended for this proposal. Status is ${currentProposal.statusText}.`;
     }
     return null;
   };
 
   const cantVote = cannotVoteReason();
 
-  const yesCount = currentProposal ? Number(currentProposal.yesVotes) : 0;
-  const noCount = currentProposal ? Number(currentProposal.noVotes) : 0;
-  const snapshotCount = currentProposal ? Math.max(1, Number(currentProposal.snapshotMembers)) : 1;
-  const awaitingCount = Math.max(0, snapshotCount - (yesCount + noCount));
+  const totalVotes = currentProposal
+    ? Number(currentProposal.yesVotes) + Number(currentProposal.noVotes)
+    : 0;
+  const yesRatio =
+    totalVotes > 0
+      ? ((Number(currentProposal.yesVotes) / totalVotes) * 100).toFixed(1)
+      : "0.0";
 
   return (
-    <div className="w-full flex flex-col items-center justify-center py-6">
-      {/* Top Banner Tag */}
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container mb-6">
-        <span className="w-1.5 h-1.5 rounded-full bg-on-tertiary-container animate-pulse" />
-        <span className="font-body text-[11px] tracking-wider uppercase text-on-surface-variant">
-          Collective Decisions • {proposals.filter((p) => p.statusCode === 0).length} Open
-        </span>
+    <div className="flex flex-col w-full pb-24 md:pb-12 bg-ink text-bone">
+      {/* Top Header & Telemetry */}
+      <div className="w-full p-4 md:p-6 flex flex-col gap-3 bg-ink border-b border-surface-variant/20">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-xs text-tertiary-fixed-dim uppercase tracking-widest">
+            [VAULT RUNTIME: SEPOLIA]
+          </span>
+          <span className="font-mono text-xs text-primary uppercase font-bold flex items-center gap-1">
+            <span className="inline-block w-2 h-2 bg-primary" />
+            QUORUM 50%
+          </span>
+        </div>
+        <h1 className="font-headline text-4xl md:text-5xl uppercase tracking-tight text-white leading-none m-0">
+          PROPOSALS ({proposals.length.toString().padStart(2, "0")})
+        </h1>
+        <p className="font-mono text-xs text-gray-400 uppercase tracking-wider">
+          AUTONOMOUS ETHEREUM CONSENSUS // NON-REVOCABLE WEIGHT
+        </p>
       </div>
 
-      {msg && (
-        <div className="w-full max-w-[460px] mb-4 p-3 rounded-lg bg-surface-container border border-outline-variant/40 text-primary font-body text-xs flex items-center justify-between">
-          <span>{msg}</span>
-          <button onClick={() => setMsg("")} className="font-bold underline ml-2">
-            ×
+      {/* 3D Wireframe Monolith 04 */}
+      <div className="w-full px-4 py-2 bg-ink">
+        <ThreeMonolith variant="04" height="h-32 md:h-40" color={0xff4d1c} />
+      </div>
+
+      {/* Toast Alert */}
+      {toast && (
+        <div className="mx-4 my-2 p-3 bg-primary/20 border-2 border-primary text-white font-mono text-xs uppercase flex items-center justify-between">
+          <span>{toast}</span>
+          <button onClick={() => setToast("")} className="font-bold underline ml-2">
+            DISMISS
           </button>
         </div>
       )}
 
-      {/* Main Single Request Card */}
-      {!currentProposal ? (
-        <div className="w-full max-w-[460px] bg-surface-container-lowest p-8 sm:p-10 rounded-xl shadow-sm text-center">
-          <p className="font-headline text-lg text-primary mb-2">The table is currently quiet</p>
-          <p className="font-body text-xs text-on-surface-variant">
-            No spending requests are open right now. You can place one on the table using the "New Request" tab.
-          </p>
+      {/* Proposals List (Horizontal Brutalist Ledger Rows) */}
+      <div className="w-full flex flex-col bg-ink border-y border-white/20">
+        <div className="w-full px-4 py-2 flex items-center justify-between bg-white/5 font-mono text-xs text-gray-400 uppercase tracking-wider">
+          <span>LEDGER REGISTER</span>
+          <span className="text-primary font-bold">SNAPSHOT ACTIVE</span>
         </div>
-      ) : (
-        <div className="w-full max-w-[460px] bg-surface-container-lowest p-8 sm:p-10 rounded-xl shadow-sm border border-outline-variant/30 transition-all text-center">
-          <div className="mb-2">
-            <span className="font-body text-[11px] uppercase tracking-wider text-secondary">
-              Community Request #{currentProposal.id}
-            </span>
+
+        {proposals.length === 0 ? (
+          <div className="p-8 text-center font-mono text-sm text-gray-500 uppercase">
+            NO PROPOSALS REGISTERED ON-CHAIN YET. USE "NEW" TAB TO SUBMIT ONE.
           </div>
+        ) : (
+          proposals.map((p) => {
+            const isSelected = currentProposal && currentProposal.id === p.id;
+            const badgeColor =
+              p.statusText === "ACTIVE"
+                ? "bg-primary/20 text-primary border-primary"
+                : p.statusText === "PASSED"
+                ? "bg-secondary/20 text-secondary border-secondary"
+                : p.statusText === "EXECUTED"
+                ? "bg-green-900/30 text-green-400 border-green-500"
+                : "bg-gray-800 text-gray-400 border-gray-600";
 
-          <h1 className="font-headline text-2xl sm:text-3xl text-primary tracking-tight mb-2">
-            {currentProposal.purpose}
-          </h1>
-
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <span className="font-display text-4xl text-primary tracking-tight font-light">
-              {ethers.formatEther(currentProposal.amount)}
-            </span>
-            <span className="font-body text-xs text-on-surface-variant uppercase tracking-widest mt-2">
-              ETH
-            </span>
-          </div>
-
-          <p className="font-body text-xs text-on-surface-variant mb-6 flex items-center justify-center gap-1.5 flex-wrap">
-            <span>By {currentProposal.proposer.slice(0, 6)}...{currentProposal.proposer.slice(-4)}</span>
-            <span>•</span>
-            <span className="font-mono text-secondary">
-              Status: {currentProposal.statusText}
-            </span>
-          </p>
-
-          {/* Show of Hands Consensus Tally */}
-          <div className="bg-surface-container-low/70 py-4 px-5 rounded-lg mb-6">
-            <div className="flex items-center justify-between text-on-surface-variant mb-3">
-              <span className="font-body text-[11px] uppercase tracking-wider">
-                Show of Hands
-              </span>
-              <span className="font-body text-xs font-mono text-on-surface">
-                {yesCount} of {snapshotCount} agreed
-              </span>
-            </div>
-
-            {/* Visual Dot Array */}
-            <div className="flex items-center justify-center gap-2 py-1 flex-wrap">
-              {Array.from({ length: yesCount }).map((_, i) => (
-                <span key={`yes-${i}`} className="w-3 h-3 rounded-full bg-on-tertiary-container" title="Yes" />
-              ))}
-              {Array.from({ length: noCount }).map((_, i) => (
-                <span key={`no-${i}`} className="w-3 h-3 rounded-full bg-secondary-fixed-dim" title="Pass" />
-              ))}
-              {Array.from({ length: Math.min(10, awaitingCount) }).map((_, i) => (
-                <span key={`await-${i}`} className="w-3 h-3 rounded-full bg-surface-container-high" title="Awaiting" />
-              ))}
-            </div>
-
-            <div className="flex items-center justify-center gap-4 mt-3 text-on-surface-variant text-[11px]">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-on-tertiary-container" />
-                <span>{yesCount} yes</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-secondary-fixed-dim" />
-                <span>{noCount} pass</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-surface-container-high" />
-                <span>{awaitingCount} awaiting</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Voting or Execution Actions */}
-          {currentProposal.statusCode === 0 ? (
-            <div>
-              {cantVote ? (
-                <p className="font-body text-xs text-outline mb-2">{cantVote}</p>
-              ) : (
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <button
-                    onClick={() => handleVote(true)}
-                    disabled={isLoading}
-                    className="w-full sm:w-1/2 py-2.5 px-4 rounded-full bg-primary text-surface font-body text-xs tracking-wider uppercase transition-colors hover:bg-primary-container active:scale-95"
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelectedId(p.id)}
+                className={`w-full text-left transition-none px-4 py-3 flex flex-col gap-1 border-b border-white/10 ${
+                  isSelected ? "bg-white/15" : "hover:bg-white/5"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-headline text-lg uppercase text-white">
+                      #{p.id.toString().padStart(3, "0")}
+                    </span>
+                    <span className="font-headline text-lg uppercase text-white tracking-tight truncate max-w-xs md:max-w-md">
+                      {p.purpose}
+                    </span>
+                  </div>
+                  <span
+                    className={`font-mono text-[10px] tracking-wider border px-2 py-0.5 uppercase font-bold ${badgeColor}`}
                   >
-                    Raise hand (Yes)
-                  </button>
-                  <button
-                    onClick={() => handleVote(false)}
-                    disabled={isLoading}
-                    className="w-full sm:w-1/2 py-2.5 px-4 rounded-full bg-surface-container text-primary font-body text-xs tracking-wider uppercase transition-colors hover:bg-surface-container-high active:scale-95"
-                  >
-                    Pass (No)
-                  </button>
+                    {p.statusText}
+                  </span>
                 </div>
-              )}
+                <div className="flex items-center justify-between font-mono text-xs text-gray-400">
+                  <span className="text-white font-medium">
+                    {ethers.formatEther(p.amount)} ETH
+                  </span>
+                  <span>
+                    YES: {p.yesVotes.toString()} / NO: {p.noVotes.toString()}
+                  </span>
+                  <span className="text-primary uppercase">
+                    SNAPSHOT: {p.snapshotMembers.toString()} VOTERS
+                  </span>
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      {/* Selected Proposal Detail Inspector */}
+      {currentProposal && (
+        <div className="w-full max-w-4xl mx-auto p-4 md:p-6 flex flex-col gap-4 bg-ink">
+          <div className="flex flex-col gap-1 border-b border-white/20 pb-3">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-primary uppercase font-bold tracking-widest">
+                // DETAIL INSPECTOR
+              </span>
+              <span className="font-mono text-xs px-2 py-0.5 border border-primary text-primary font-bold uppercase">
+                {currentProposal.statusText}
+              </span>
             </div>
-          ) : currentProposal.statusCode === 1 ? (
-            <button
-              onClick={handleExecute}
-              disabled={isLoading}
-              className="w-full py-3 rounded-full bg-secondary text-surface font-body text-xs uppercase tracking-wider hover:bg-opacity-90 active:scale-95 shadow-sm"
-            >
-              {isLoading ? "Releasing funds..." : "Release funds (Consensus Reached)"}
-            </button>
-          ) : (
-            <div className="py-2 text-xs font-mono text-outline uppercase">
-              Proposal {currentProposal.statusText}
+            <h2 className="font-headline text-2xl md:text-3xl uppercase text-white leading-tight m-0">
+              #{currentProposal.id.toString().padStart(3, "0")} {currentProposal.purpose}
+            </h2>
+            <div className="font-mono text-xs text-gray-400 uppercase tracking-wider flex flex-wrap gap-4 mt-1">
+              <span>ALLOCATION: {ethers.formatEther(currentProposal.amount)} ETH</span>
+              <span>RECIPIENT: {currentProposal.recipient}</span>
+              <span>PROPOSER: {currentProposal.proposer}</span>
+            </div>
+          </div>
+
+          {/* Consensus Tally Progress Bar */}
+          <div className="w-full bg-white/5 border border-white/20 p-4 flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              <span className="font-mono text-xs text-white uppercase tracking-wider font-bold">
+                CONSENSUS TALLY
+              </span>
+              <span className="font-mono text-xs text-white font-bold">
+                YES {yesRatio}%
+              </span>
+            </div>
+            <div className="w-full h-2 bg-gray-800 overflow-hidden flex">
+              <div
+                className="h-full bg-primary transition-none"
+                style={{ width: `${yesRatio}%` }}
+              />
+              <div
+                className="h-full bg-gray-600 transition-none"
+                style={{ width: `${100 - parseFloat(yesRatio)}%` }}
+              />
+            </div>
+            <div className="flex justify-between items-center font-mono text-[11px] text-gray-400">
+              <span>YES: {currentProposal.yesVotes.toString()} VOTES</span>
+              <span>NO: {currentProposal.noVotes.toString()} VOTES</span>
+            </div>
+          </div>
+
+          {/* Voting Ineligibility Notice (if applicable) */}
+          {cantVote && (
+            <div className="w-full bg-white/5 border border-white/20 text-white p-3 flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-primary text-sm">
+                  info
+                </span>
+                <span className="font-mono text-xs uppercase tracking-wider font-bold text-white">
+                  VOTING NOTICE
+                </span>
+              </div>
+              <p className="font-body text-xs text-gray-400 m-0 leading-relaxed">
+                {cantVote}
+              </p>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Archive / Past Requests Modal Toggle */}
-      {proposals.length > 0 && (
-        <div className="mt-6">
-          <button
-            onClick={() => setShowArchive(true)}
-            className="font-body text-xs uppercase tracking-wider text-on-surface-variant hover:text-primary transition-colors underline underline-offset-4 decoration-outline-variant"
-          >
-            See all requests ({proposals.length} total)
-          </button>
-        </div>
-      )}
-
-      {/* Past Requests Modal */}
-      {showArchive && (
-        <div className="fixed inset-0 z-50 bg-primary/20 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface-container-lowest max-w-[460px] w-full p-6 sm:p-8 rounded-xl shadow-lg border border-outline-variant/30 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-outline-variant/20">
-              <div>
-                <span className="font-body text-[10px] uppercase tracking-wider text-secondary">
-                  Archive
-                </span>
-                <h2 className="font-headline text-xl text-primary mt-0.5">
-                  All Collective Requests
-                </h2>
-              </div>
+          {/* Action Buttons: Vote YES / Vote NO */}
+          <div className="w-full flex flex-col gap-3 pt-2">
+            <div className="grid grid-cols-2 gap-3 w-full">
               <button
-                onClick={() => setShowArchive(false)}
-                className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors"
+                onClick={() => handleVote(true)}
+                disabled={Boolean(cantVote) || isLoading}
+                className={`w-full h-12 font-headline text-lg uppercase tracking-wider flex items-center justify-center border-2 border-primary transition-none ${
+                  cantVote || isLoading
+                    ? "opacity-40 cursor-not-allowed bg-white/5 text-gray-400 border-gray-600"
+                    : "bg-primary text-white hover:bg-primary-dark"
+                }`}
               >
-                <span className="material-symbols-outlined text-sm">close</span>
+                VOTE YES
+              </button>
+              <button
+                onClick={() => handleVote(false)}
+                disabled={Boolean(cantVote) || isLoading}
+                className={`w-full h-12 font-headline text-lg uppercase tracking-wider flex items-center justify-center border-2 border-white transition-none ${
+                  cantVote || isLoading
+                    ? "opacity-40 cursor-not-allowed bg-white/5 text-gray-400 border-gray-600"
+                    : "bg-white text-ink hover:bg-gray-200"
+                }`}
+              >
+                VOTE NO
               </button>
             </div>
 
-            <div className="space-y-3">
-              {proposals.map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => {
-                    setSelectedId(p.id);
-                    setShowArchive(false);
-                  }}
-                  className="p-3.5 rounded-lg bg-surface-container-low transition-colors hover:bg-surface-container flex items-center justify-between cursor-pointer text-left"
-                >
-                  <div className="min-w-0 pr-3">
-                    <p className="font-body text-xs text-primary font-medium truncate">
-                      #{p.id} {p.purpose}
-                    </p>
-                    <p className="font-body text-[10px] text-on-surface-variant mt-0.5">
-                      Yes: {p.yesVotes.toString()} • No: {p.noVotes.toString()}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <span className="font-mono text-xs text-primary block">
-                      {ethers.formatEther(p.amount)} ETH
-                    </span>
-                    <span
-                      className={`font-body text-[10px] uppercase tracking-wider mt-0.5 block ${
-                        p.statusText === "PASSED" || p.statusText === "EXECUTED"
-                          ? "text-on-tertiary-container font-semibold"
-                          : "text-outline"
-                      }`}
-                    >
-                      {p.statusText}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6 pt-2 text-center">
-              <button
-                onClick={() => setShowArchive(false)}
-                className="w-full py-2 rounded-full bg-surface-container text-primary font-body text-xs uppercase tracking-wider hover:bg-surface-container-high transition-colors"
-              >
-                Return to card
-              </button>
-            </div>
+            {/* Execute Proposal Button */}
+            <button
+              onClick={handleExecute}
+              disabled={currentProposal.statusText !== "PASSED" || isLoading}
+              className={`w-full h-14 font-headline text-xl uppercase tracking-wider flex items-center justify-center transition-none border-2 ${
+                currentProposal.statusText === "PASSED"
+                  ? "bg-secondary text-white hover:bg-secondary-dark border-secondary cursor-pointer"
+                  : currentProposal.statusText === "EXECUTED"
+                  ? "bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed"
+                  : "bg-white/5 text-gray-500 border-gray-800 cursor-not-allowed"
+              }`}
+            >
+              {isLoading
+                ? "BROADCASTING EXECUTION..."
+                : currentProposal.statusText === "PASSED"
+                ? "EXECUTE PROPOSAL (PERMISSIONLESS)"
+                : currentProposal.statusText === "EXECUTED"
+                ? "PROPOSAL ALREADY EXECUTED"
+                : `CANNOT EXECUTE (STATUS: ${currentProposal.statusText})`}
+            </button>
           </div>
         </div>
       )}
     </div>
   );
 }
+

@@ -4,12 +4,9 @@
 
 @layer base {
   body {
-    background-color: #fef9ef;
-    color: #1d1c16;
-    font-family: 'Inter', sans-serif;
+    background-color: #fcf9f8;
+    color: #141414;
+    font-family: 'Space Grotesk', sans-serif;
   }
 }
 
-::-webkit-scrollbar {
-  display: none;
-}
