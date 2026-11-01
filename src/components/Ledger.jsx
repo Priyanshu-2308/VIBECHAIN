@@ -1,113 +1,99 @@
 import React from "react";
 import { ethers } from "ethers";
-import contractData from "../contract.json";
 
 export default function Ledger({ events = [], isLoadingEvents, onRefresh }) {
-  const getBadgeStyle = (name) => {
+  const getEventBadge = (name) => {
     switch (name) {
       case "Executed":
-        return "bg-secondary text-white border-secondary";
+        return { label: "Settled", color: "bg-on-tertiary-container" };
       case "ProposalCreated":
-        return "bg-primary text-white border-primary";
+        return { label: "Requested", color: "bg-secondary-container" };
       case "Joined":
-        return "bg-ink text-white border-ink";
+        return { label: "Pledge (Join)", color: "bg-primary" };
       case "Voted":
-        return "bg-surface-variant text-ink border-ink";
+        return { label: "Show of Hands", color: "bg-surface-container-high" };
       case "Contributed":
-        return "bg-amber-600 text-white border-amber-600";
+        return { label: "Gift (Inflow)", color: "bg-secondary" };
       case "Left":
-        return "bg-gray-400 text-ink border-gray-500";
+        return { label: "Departure", color: "bg-outline" };
       default:
-        return "bg-surface text-ink border-ink";
+        return { label: name, color: "bg-outline-variant" };
     }
   };
 
   return (
-    <div className="flex flex-col w-full pb-24 md:pb-12 bg-surface text-ink">
-      <div className="max-w-4xl mx-auto w-full p-4 md:p-6 flex flex-col gap-6">
-        {/* Header */}
-        <div className="flex flex-col gap-1 border-b-2 border-ink pb-4">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-xs uppercase tracking-widest text-primary font-bold">
-              PUBLIC TRANSPARENCY REGISTRY
+    <div className="w-full flex flex-col items-center justify-center py-6">
+      <div className="w-full max-w-[500px] bg-surface-container-lowest p-6 sm:p-8 rounded-xl shadow-sm border border-outline-variant/30">
+        <div className="flex items-center justify-between pb-3 mb-4 border-b border-outline-variant/20">
+          <div>
+            <span className="font-body text-[10px] uppercase tracking-wider text-secondary block">
+              Transparency
             </span>
-            <button
-              onClick={onRefresh}
-              className="font-mono text-xs text-secondary hover:underline uppercase font-bold flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-sm">refresh</span>
-              REFRESH FEED
-            </button>
+            <h1 className="font-headline text-2xl text-primary font-normal">
+              The Notebook
+            </h1>
           </div>
-          <h1 className="font-headline text-3xl md:text-4xl uppercase tracking-tight m-0">
-            ON-CHAIN AUDIT LOG
-          </h1>
-          <p className="font-mono text-xs text-on-surface-variant uppercase">
-            IMMUTABLE CHRONICLE OF EVERY INFLOW, VOTE, AND OUTFLOW
-          </p>
+          <button
+            onClick={onRefresh}
+            className="text-xs text-secondary hover:underline flex items-center gap-1 font-body"
+          >
+            <span className="material-symbols-outlined text-sm">refresh</span>
+            Sync
+          </button>
         </div>
 
-        {/* Explainability Callout for Judges */}
-        <div className="p-4 bg-surface-container border-2 border-ink flex flex-col gap-2">
-          <div className="font-headline text-lg uppercase text-ink">
-            WHAT ANYONE CAN PUBLICLY VERIFY
-          </div>
-          <p className="font-body text-xs text-on-surface-variant leading-relaxed m-0">
-            In VIBECHAIN, every treasury outflow requires an immutable chain of custody:
-            a member must create a proposal with a stated purpose (max 50% cap), eligible
-            members must vote reaching a 50% quorum, and funds leave only via the
-            tamper-proof <code>execute()</code> function emitting the exact recipient,
-            amount, and purpose on Ethereum Sepolia.
-          </p>
-        </div>
+        <p className="font-body text-xs text-on-surface-variant mb-6 leading-relaxed">
+          A permanent, public chronicle of every coin placed in the pot, every raised hand, and every settled expenditure.
+        </p>
 
-        {/* Events Feed */}
-        <div className="flex flex-col border-2 border-ink divide-y-2 divide-ink bg-white">
+        <div className="space-y-3">
           {isLoadingEvents ? (
-            <div className="p-8 text-center font-mono text-sm uppercase text-gray-500">
-              SYNCHRONIZING WITH SEPOLIA RPC...
+            <div className="py-8 text-center font-body text-xs text-outline">
+              Leafing through pages on Sepolia...
             </div>
           ) : events.length === 0 ? (
-            <div className="p-8 text-center font-mono text-sm uppercase text-gray-500">
-              NO EVENTS DETECTED YET. ALL TRANSACTIONS WILL STREAM HERE LIVE.
+            <div className="py-8 text-center font-body text-xs text-outline">
+              The notebook is clean. New events will appear here automatically.
             </div>
           ) : (
-            events.map((evt, idx) => (
-              <div key={`${evt.txHash}-${idx}`} className="p-4 flex flex-col gap-2 hover:bg-surface-container/50">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`font-mono text-[10px] uppercase font-bold px-2 py-0.5 border ${getBadgeStyle(
-                        evt.name
-                      )}`}
-                    >
-                      {evt.name}
-                    </span>
-                    <span className="font-mono text-xs text-ink font-bold">
-                      BLOCK #{evt.blockNumber}
-                    </span>
+            events.map((evt, idx) => {
+              const badge = getEventBadge(evt.name);
+              return (
+                <div
+                  key={`${evt.txHash}-${idx}`}
+                  className="p-3.5 rounded-lg bg-surface-container-low/70 border border-outline-variant/30 flex items-start justify-between gap-3"
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${badge.color}`} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-body text-xs font-medium text-primary">
+                          {badge.label}
+                        </span>
+                        <span className="font-mono text-[10px] text-outline">
+                          Block #{evt.blockNumber}
+                        </span>
+                      </div>
+                      <p className="font-body text-[11px] text-on-surface-variant mt-0.5 break-words">
+                        {evt.details}
+                      </p>
+                    </div>
                   </div>
 
                   <a
                     href={`https://sepolia.etherscan.io/tx/${evt.txHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-[11px] text-secondary hover:underline uppercase flex items-center gap-1 font-bold"
+                    className="font-mono text-[10px] text-secondary hover:underline flex-shrink-0 mt-0.5"
                   >
-                    <span>TX: {evt.txHash.slice(0, 10)}...</span>
-                    <span>↗</span>
+                    TX ↗
                   </a>
                 </div>
-
-                <div className="font-mono text-xs text-ink/80 flex flex-col gap-1 bg-surface-container/40 p-2 border border-surface-variant">
-                  {evt.details}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
     </div>
   );
 }
-
