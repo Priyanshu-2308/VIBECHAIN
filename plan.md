@@ -157,3 +157,4 @@ event Executed(uint256 indexed id, address indexed recipient, uint256 amount, st
 1. **One-Wallet-One-Vote:** Sybil resistance is anchored to the economic cost of the `MEMBERSHIP_FEE`.
 2. **Non-Refundable Leave:** Leaving the club does not refund the membership fee; forfeited funds remain in the treasury to protect collective liquidity.
 3. **Execution Window & Balance Fluctuations:** If a proposal passes but treasury balance drops below required amount before execution, execution will revert until more funds arrive or until `expiresAt`, after which it becomes Expired.
+

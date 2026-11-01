@@ -1,11 +1,20 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
 
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
-const signerKey = process.env["PRIVATE_KEY"] || process.env["DEPLOYER_SIGNER_KEY"];
+let SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
+if (SEPOLIA_RPC_URL.includes("eth-sepoliabeacon.g.alchemy.com")) {
+  SEPOLIA_RPC_URL = SEPOLIA_RPC_URL.replace("eth-sepoliabeacon.g.alchemy.com", "eth-sepolia.g.alchemy.com");
+}
+
+const signerKey =
+  process.env["DEPLOYER_PRIVATE_KEY"] ||
+  process.env["PRIVATE_KEY"] ||
+  process.env["DEPLOYER_SIGNER_KEY"];
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 
-const accounts = signerKey ? [signerKey.startsWith("0x") ? signerKey : `0x${signerKey}`] : [];
+const accounts = (signerKey && signerKey.trim().length > 0)
+  ? [signerKey.trim().startsWith("0x") ? signerKey.trim() : `0x${signerKey.trim()}`]
+  : [];
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {

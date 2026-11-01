@@ -17,16 +17,17 @@ Judges and participants can verify:
 4. **Public Verification**: Every contribution, membership join/leave, proposal creation, vote, and execution emits on-chain events verifiable on Etherscan and in the live UI ledger.
 
 ## Live Deployment
-- **Contract Address (Sepolia):** `TBD (Deploying in Phase 2)`
-- **Etherscan Link:** `TBD`
+- **Contract Address (Sepolia):** [`0xF48e84897C92387dc11b08058511BD3cc2B3B9c7`](https://sepolia.etherscan.io/address/0xF48e84897C92387dc11b08058511BD3cc2B3B9c7)
+- **Deployment Block:** `12039018`
+- **Etherscan Link:** [https://sepolia.etherscan.io/address/0xF48e84897C92387dc11b08058511BD3cc2B3B9c7](https://sepolia.etherscan.io/address/0xF48e84897C92387dc11b08058511BD3cc2B3B9c7)
 - **Live dApp URL:** [https://priyanshu-2308.github.io/VIBECHAIN/](https://priyanshu-2308.github.io/VIBECHAIN/)
 
 ## Demo Parameters
 - `MEMBERSHIP_FEE`: `0.001 ETH`
-- `VOTING_PERIOD`: `300 seconds` (5 minutes) *(Short voting period chosen specifically for interactive judge testing and live demo evaluation)*
+- `VOTING_PERIOD`: `300 seconds` (5 minutes) *(A 5-minute voting period was chosen deliberately for hackathon demo evaluation so judges can create proposals, vote, and see them become executable within the judging session)*
 - `EXECUTION_WINDOW`: `86400 seconds` (24 hours)
-- `QUORUM_BPS`: `5000` (50%)
-- `MAX_SPEND_BPS`: `5000` (50% max treasury spend per proposal)
+- `QUORUM_BPS`: `5000` (50% of snapshot members must vote YES)
+- `MAX_SPEND_BPS`: `5000` (50% max treasury spend cap per proposal)
 
 ## Known Tradeoffs
 1. **Sybil Resistance via Fee**: One-wallet-one-vote relies on economic cost (`MEMBERSHIP_FEE`).
@@ -38,6 +39,7 @@ Judges and participants can verify:
 - **Single Execution**: A proposal can be executed at most once.
 - **Consensus Required**: Failed, expired, or unapproved proposals cannot move funds.
 - **Reentrancy Protection**: Checks-Effects-Interactions pattern enforced with OpenZeppelin `ReentrancyGuard`.
+- **Test Suite**: 34 automated unit and attack-simulation tests passing (`npx hardhat test`).
 
 ---
 *Built with Vite + React + ethers.js + Three.js + Hardhat + Tailwind CSS.*
