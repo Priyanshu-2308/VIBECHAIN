@@ -1,0 +1,33 @@
+# Environment files (NEVER COMMIT)
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+package-lock.json.bak
+
+# Hardhat build artifacts
+artifacts/
+cache/
+typechain/
+typechain-types/
+
+# Vite / Frontend build output
+dist/
+dist-ssr/
+*.local
+
+# Test & Coverage
+coverage/
+coverage.json
+*.lcov
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Problem statement PDF if untracked or keep tracked?
+# The user repository is https://github.com/Priyanshu-2308/VIBECHAIN
