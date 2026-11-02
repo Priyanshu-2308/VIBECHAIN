@@ -101,7 +101,7 @@ export default function ThreeMonolith({ variant = "01", height = "h-44", color =
 
   return (
     <div className={`w-full ${height} bg-surface-container relative flex flex-col items-center justify-center border border-surface-variant select-none overflow-hidden group`}>
-      {/* HUD Telemetry Coordinates from Stitch Design System */}
+      {/* HUD Telemetry Coordinates from Design System */}
       <div className="absolute top-2 left-2 font-mono text-[10px] text-tertiary tracking-wider pointer-events-none">
         SYS.GEO [X:0.00 Y:1.00 Z:0.00]
       </div>

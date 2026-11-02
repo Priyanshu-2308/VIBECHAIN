@@ -77,10 +77,24 @@ On the **Ledger** view in the dApp, every transaction links directly to the bloc
 
 ---
 
-## 5. Known Tradeoffs (Disclosed Honestly)
-1. **Sybil Resistance via Fee:** One-wallet-one-vote relies on the financial cost of `MEMBERSHIP_FEE`. Because all fees are locked in the treasury, attacking the vote costs more than the 50% spend cap yields.
-2. **Non-Refundable Leave:** When a member leaves (`leave()`), their fee is not refunded. This preserves collective solvency and prevents sudden bank runs.
-3. **Dynamic Balance Fluctuation:** If multiple passed proposals compete for funds and treasury balance drops below a proposal's amount or spend cap, execution safely reverts until more funds are deposited or the execution window expires.
+## 5. Accepted Trade-offs & Governance Design Choices
+
+Every decentralized treasury makes conscious trade-offs between capital preservation, governance speed, and voter coordination. The following items reflect deliberate architectural decisions:
+
+| ID | Item | Classification | One-Line Rationale |
+|---|---|---|---|
+| **ADV-01** | Spot-balance spend cap on execution | Accepted Trade-off | Capital preservation takes precedence over execution guarantees; concurrent proposals must maintain solvency at execution time. |
+| **ADV-02** | 1 YES vote passes in 2-member club | Design Reality | With 2 members and 1 abstention, 1 YES vote equals 50% snapshot quorum and 100% majority of votes cast. |
+| **ADV-03** | Excess join fee retained by treasury | Accepted Trade-off | Treasury endowment design treats deposits above minimum fee as non-refundable gifts to shared liquidity. |
+| **ADV-04** | Short 300s voting period | Accepted Trade-off | Configured specifically for live hackathon demonstration speed; production deployments would configure 3–7 day periods. |
+| **ADV-05** | Byte counting on purpose field | Character Encoding | Solidity enforces UTF-8 byte limits (`1..200 bytes`); client-side UI uses `TextEncoder` to prevent multi-byte emoji truncation. |
+| **ADV-08** | Real-time countdown timers | UX Improvement | Replaced static block timestamps with live dynamic countdown tickers on proposal lists and detail views. |
+
+### Contract v2 Improvements (Requires Contract Redeployment)
+The current immutable deployed contract (`0xF48e84897C92387dc11b08058511BD3cc2B3B9c7`) is locked on Sepolia. A future v2 contract upgrade (contingent on formal approval) will resolve the following three contract-level spec deviations:
+1. **Remove Minimum-2-Members Check on Propose (`contracts/ClubTreasury.sol:152`):** Currently reverts with `InsufficientMembers()` if `memberCount < 2`. v2 will allow any member in a 1-member collective to submit proposals.
+2. **Strict Quorum Snapshot (`contracts/ClubTreasury.sol:227-228, 265`):** Currently computes quorum against `min(memberCount, snapshotMembers)` (`effectiveSnapshot`). v2 will base quorum strictly on `snapshotMembers` regardless of subsequent member defections.
+3. **Strict Historical Join Voting Invariant (`contracts/ClubTreasury.sol:204`):** Currently evaluates `joinedAt > createdAt`, permitting same-block joiners (`joinedAt == createdAt`) to vote. v2 will enforce `joinedAt < createdAt` so only members registered in prior blocks may vote.
 
 ---
 
@@ -138,7 +152,7 @@ npm run build
 ---
 
 ## 8. Frontend Architecture & Design System
-Designed with the **Stitch "Treasury Monolith"** brutalist aesthetic:
+Designed with the **"Treasury Monolith"** brutalist aesthetic:
 - **Palette:** Signal Orange (`#FF4D1C`), Cobalt (`#1B1BFF`), Ink (`#141414`), and Bone (`#FCF9F8`).
 - **Typography:** Anton (Headlines) and Space Grotesk (Body & Telemetry).
 - **Three.js Monolith:** Rotating 3D wireframe geometric vault embedded into hero viewports with real-time HUD coordinates.

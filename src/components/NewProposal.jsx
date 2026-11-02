@@ -6,6 +6,7 @@ export default function NewProposal({
   account,
   isMember,
   memberCount = 0,
+  parameters = {},
   treasuryBalance,
   onRefresh,
   onConnect,
@@ -17,7 +18,9 @@ export default function NewProposal({
   const [isLoading, setIsLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
 
-  const maxAllowedSpend = parseFloat(treasuryBalance) * 0.5;
+  const maxSpendFraction = parameters.maxSpendBps ? parameters.maxSpendBps / 10000 : 0.5;
+  const maxSpendPercent = parameters.maxSpendBps ? parameters.maxSpendBps / 100 : 50;
+  const maxAllowedSpend = parseFloat(treasuryBalance) * maxSpendFraction;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,7 +43,7 @@ export default function NewProposal({
 
     if (amt > maxAllowedSpend) {
       return setStatusMsg(
-        `Amount (${amt} ETH) exceeds 50% max spend ceiling (${maxAllowedSpend.toFixed(4)} ETH).`
+        `Amount (${amt} ETH) exceeds ${maxSpendPercent}% max spend ceiling (${maxAllowedSpend.toFixed(4)} ETH).`
       );
     }
 
@@ -88,7 +91,7 @@ export default function NewProposal({
             DISPATCH PROPOSAL
           </h1>
           <p className="font-mono text-xs text-on-surface-variant uppercase">
-            COMMUNITY-VOTED CAPITAL OUTFLOWS // 50% SPEND CEILING ENFORCED
+            COMMUNITY-VOTED CAPITAL OUTFLOWS // {maxSpendPercent}% SPEND CEILING ENFORCED
           </p>
         </div>
 
@@ -151,7 +154,7 @@ export default function NewProposal({
                 REQUESTED AMOUNT [ETH]
               </label>
               <span className="font-mono text-[11px] text-primary font-bold">
-                MAX 50%: {maxAllowedSpend.toFixed(4)} ETH
+                MAX {maxSpendPercent}%: {maxAllowedSpend.toFixed(4)} ETH
               </span>
             </div>
             <div className="flex items-center border-2 border-ink bg-surface h-12 px-3">

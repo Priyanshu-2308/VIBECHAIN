@@ -6,6 +6,7 @@ export default function Dashboard({
   treasuryBalance,
   memberCount,
   proposalCount,
+  parameters = {},
   account,
   onConnect,
   onNavigate,
@@ -14,6 +15,13 @@ export default function Dashboard({
   const etherscanUrl = contractData.address
     ? `https://sepolia.etherscan.io/address/${contractData.address}`
     : "https://sepolia.etherscan.io";
+
+  const joinFeeDisplay = `${parameters.membershipFeeEth || "0.001"} ETH`;
+  const votingTimeDisplay = parameters.votingPeriodSeconds
+    ? `${parameters.votingPeriodSeconds}S (${Math.round(parameters.votingPeriodSeconds / 60)}M)`
+    : "300S (5M)";
+  const quorumDisplay = parameters.quorumBps ? `${parameters.quorumBps / 100}%` : "50%";
+  const maxSpendDisplay = parameters.maxSpendBps ? `${parameters.maxSpendBps / 100}%` : "50%";
 
   return (
     <div className="flex flex-col w-full pb-24 md:pb-12">
@@ -71,14 +79,14 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* Immutable 4-Parameter Governance Matrix */}
+      {/* Dynamic 4-Parameter Governance Matrix */}
       <div className="w-full bg-surface p-4 grid grid-cols-2 md:grid-cols-4 gap-px bg-surface-variant border-b border-surface-variant">
         <div className="flex flex-col bg-surface p-3 justify-between">
           <span className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider">
             PARAM 01 // JOIN
           </span>
           <span className="font-headline text-xl md:text-2xl text-ink uppercase my-1">
-            0.001 ETH
+            {joinFeeDisplay}
           </span>
           <span className="font-mono text-[11px] text-tertiary uppercase">
             JOIN FEE
@@ -90,7 +98,7 @@ export default function Dashboard({
             PARAM 02 // TIME
           </span>
           <span className="font-headline text-xl md:text-2xl text-ink uppercase my-1">
-            300S (5M)
+            {votingTimeDisplay}
           </span>
           <span className="font-mono text-[11px] text-tertiary uppercase">
             VOTING WINDOW
@@ -102,7 +110,7 @@ export default function Dashboard({
             PARAM 03 // QUORUM
           </span>
           <span className="font-headline text-xl md:text-2xl text-ink uppercase my-1">
-            50%
+            {quorumDisplay}
           </span>
           <span className="font-mono text-[11px] text-tertiary uppercase">
             MIN FLOOR
@@ -114,7 +122,7 @@ export default function Dashboard({
             PARAM 04 // LIMIT
           </span>
           <span className="font-headline text-xl md:text-2xl text-ink uppercase my-1">
-            50%
+            {maxSpendDisplay}
           </span>
           <span className="font-mono text-[11px] text-tertiary uppercase">
             MAX SPEND CAP

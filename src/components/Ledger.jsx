@@ -2,7 +2,15 @@ import React from "react";
 import { ethers } from "ethers";
 import contractData from "../contract.json";
 
-export default function Ledger({ events = [], isLoadingEvents, onRefresh }) {
+export default function Ledger({
+  events = [],
+  parameters = {},
+  isLoadingEvents,
+  isLoadingOlderHistory = false,
+  onRefresh,
+}) {
+  const maxSpendPct = parameters.maxSpendBps ? parameters.maxSpendBps / 100 : 50;
+  const quorumPct = parameters.quorumBps ? parameters.quorumBps / 100 : 50;
   const getBadgeStyle = (name) => {
     switch (name) {
       case "Executed":
@@ -54,12 +62,22 @@ export default function Ledger({ events = [], isLoadingEvents, onRefresh }) {
           </div>
           <p className="font-body text-xs text-on-surface-variant leading-relaxed m-0">
             In VIBECHAIN, every treasury outflow requires an immutable chain of custody:
-            a member must create a proposal with a stated purpose (max 50% cap), eligible
-            members must vote reaching a 50% quorum, and funds leave only via the
+            a member must create a proposal with a stated purpose (max {maxSpendPct}% cap), eligible
+            members must vote reaching a {quorumPct}% quorum, and funds leave only via the
             tamper-proof <code>execute()</code> function emitting the exact recipient,
             amount, and purpose on Ethereum Sepolia.
           </p>
         </div>
+
+        {/* Loading Older History Banner */}
+        {isLoadingOlderHistory && (
+          <div className="p-3 bg-amber-500/10 border-2 border-amber-600 text-ink flex items-center gap-3 font-mono text-xs uppercase animate-pulse">
+            <span className="material-symbols-outlined text-amber-600 text-base">history</span>
+            <span>
+              Scanning historical blocks from deployment (deploy block to latest)... Older transactions are being indexed in background.
+            </span>
+          </div>
+        )}
 
         {/* Events Feed */}
         <div className="flex flex-col border-2 border-ink divide-y-2 divide-ink bg-white">

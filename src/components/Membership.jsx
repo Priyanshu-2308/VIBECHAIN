@@ -6,14 +6,22 @@ import { getSignerContract, checkAndSwitchNetwork } from "../utils/ethereum.js";
 export default function Membership({
   account,
   isMember,
+  parameters = {},
   treasuryBalance,
   onRefresh,
   onConnect,
 }) {
-  const [joinFeeEth, setJoinFeeEth] = useState("0.001");
+  const requiredFeeEth = parameters.membershipFeeEth || "0.001";
+  const [joinFeeEth, setJoinFeeEth] = useState(requiredFeeEth);
   const [contribAmount, setContribAmount] = useState("0.01");
   const [isLoading, setIsLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+
+  React.useEffect(() => {
+    if (parameters.membershipFeeEth) {
+      setJoinFeeEth(parameters.membershipFeeEth);
+    }
+  }, [parameters.membershipFeeEth]);
 
   const handleJoin = async () => {
     if (!account) return onConnect();
@@ -143,11 +151,11 @@ export default function Membership({
               </span>
             </div>
             <div className="font-headline text-3xl uppercase">
-              FEE: {joinFeeEth} ETH
+              FEE: {requiredFeeEth} ETH
             </div>
             <p className="font-body text-xs text-gray-300">
-              Deposit the exact required membership fee into the treasury contract.
-              All funds stay inside the contract for collective allocation.
+              Deposit the required membership fee into the treasury contract.
+              Important: any excess amount contributed above the required fee is permanently allocated to collective treasury reserves and is NOT refunded.
             </p>
             <button
               onClick={handleJoin}
@@ -212,9 +220,11 @@ export default function Membership({
             <span className="text-white font-bold">{treasuryBalance} ETH</span>
           </div>
           <div className="flex justify-between items-center py-1">
-            <span className="text-white/80">VOTING ALLOCATION CEILING (50%)</span>
+            <span className="text-white/80">
+              VOTING ALLOCATION CEILING ({parameters.maxSpendBps ? parameters.maxSpendBps / 100 : 50}%)
+            </span>
             <span className="text-white font-bold">
-              {(parseFloat(treasuryBalance) * 0.5).toFixed(4)} ETH
+              {(parseFloat(treasuryBalance) * (parameters.maxSpendBps ? parameters.maxSpendBps / 10000 : 0.5)).toFixed(4)} ETH
             </span>
           </div>
         </div>
@@ -238,8 +248,7 @@ export default function Membership({
                 warning
               </span>
               <span>
-                STAKE REFUND BURNS VOTING SHARE. UNREVOCABLE STATE TRANSITION
-                TRIGGERED UPON SUBMISSION.
+                DEFECTION PERMANENTLY REVOKES VOTING RIGHTS. NO REFUND IS ISSUED UPON DEPARTURE; FUNDS REMAIN SECURED IN TREASURY.
               </span>
             </div>
           </div>

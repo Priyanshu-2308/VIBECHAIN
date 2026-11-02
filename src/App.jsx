@@ -15,6 +15,18 @@ import {
 } from "./utils/ethereum.js";
 import contractData from "./contract.json";
 
+async function fetchWithRetry(queryFn, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await queryFn();
+    } catch (err) {
+      if (attempt === maxRetries) throw err;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    }
+  }
+  return [];
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [account, setAccount] = useState("");
@@ -26,7 +38,16 @@ export default function App() {
   const [proposals, setProposals] = useState([]);
   const [events, setEvents] = useState([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [parameters, setParameters] = useState({
+    membershipFeeWei: contractData.parameters?.membershipFeeWei || "1000000000000000",
+    membershipFeeEth: contractData.parameters?.membershipFeeEth || "0.001",
+    votingPeriodSeconds: contractData.parameters?.votingPeriodSeconds || 300,
+    executionWindowSeconds: contractData.parameters?.executionWindowSeconds || 86400,
+    quorumBps: contractData.parameters?.quorumBps || 5000,
+    maxSpendBps: contractData.parameters?.maxSpendBps || 5000,
+  });
 
   // Connect wallet
   const connectWallet = async () => {
@@ -72,7 +93,7 @@ export default function App() {
     }
   }, []);
 
-  // Fetch contract data
+  // Fetch contract data & dynamic parameters from getters
   const loadContractData = useCallback(async () => {
     const contract = getReadOnlyContract();
     if (!contract) return;
@@ -90,7 +111,28 @@ export default function App() {
       const count = Number(pCount);
       setProposalCount(count);
 
-      // Load all proposals
+      // Fetch dynamic parameters from getters
+      try {
+        const [fee, vPeriod, eWindow, qBps, maxSpend] = await Promise.all([
+          contract.MEMBERSHIP_FEE(),
+          contract.VOTING_PERIOD(),
+          contract.EXECUTION_WINDOW(),
+          contract.QUORUM_BPS(),
+          contract.MAX_SPEND_BPS(),
+        ]);
+        setParameters({
+          membershipFeeWei: fee.toString(),
+          membershipFeeEth: ethers.formatEther(fee),
+          votingPeriodSeconds: Number(vPeriod),
+          executionWindowSeconds: Number(eWindow),
+          quorumBps: Number(qBps),
+          maxSpendBps: Number(maxSpend),
+        });
+      } catch (paramErr) {
+        console.warn("Could not read dynamic parameters, fallback to config:", paramErr);
+      }
+
+      // Load all proposals directly from contract state (always complete, independent of event log window)
       const propList = [];
       for (let i = 1; i <= count; i++) {
         try {
@@ -140,7 +182,7 @@ export default function App() {
     }
   }, [account]);
 
-  // Load on-chain event logs for transparency audit
+  // Load on-chain event logs with chunking (max 4,500 blocks/chunk) and retry/backoff
   const loadEvents = useCallback(async () => {
     const contract = getReadOnlyContract();
     if (!contract) return;
@@ -150,74 +192,97 @@ export default function App() {
       const provider = getPublicProvider();
       const currentBlock = await provider.getBlockNumber();
       const deployBlock = contractData.deployBlock || 0;
-      // Safeguard against RPC getLogs block range limit (max ~4,500 blocks)
-      const fromBlock = Math.max(deployBlock, currentBlock > 4500 ? currentBlock - 4500 : 0);
+      const CHUNK_SIZE = 4500;
 
-      const [contributed, joined, left, propCreated, voted, executed] =
-        await Promise.all([
-          contract.queryFilter(contract.filters.Contributed(), fromBlock, "latest"),
-          contract.queryFilter(contract.filters.Joined(), fromBlock, "latest"),
-          contract.queryFilter(contract.filters.Left(), fromBlock, "latest"),
-          contract.queryFilter(contract.filters.ProposalCreated(), fromBlock, "latest"),
-          contract.queryFilter(contract.filters.Voted(), fromBlock, "latest"),
-          contract.queryFilter(contract.filters.Executed(), fromBlock, "latest"),
-        ]);
+      if (currentBlock - deployBlock > CHUNK_SIZE) {
+        setIsLoadingOlderHistory(true);
+      }
 
       const parsedEvents = [];
 
-      contributed.forEach((e) => {
-        parsedEvents.push({
-          name: "Contributed",
-          blockNumber: e.blockNumber,
-          txHash: e.transactionHash,
-          details: `Inflow from ${e.args.from}: +${ethers.formatEther(e.args.amount)} ETH`,
-        });
-      });
+      for (let from = deployBlock; from <= currentBlock; from += CHUNK_SIZE) {
+        const to = Math.min(from + CHUNK_SIZE - 1, currentBlock);
 
-      joined.forEach((e) => {
-        parsedEvents.push({
-          name: "Joined",
-          blockNumber: e.blockNumber,
-          txHash: e.transactionHash,
-          details: `New Member ${e.args.member} staked ${ethers.formatEther(e.args.feePaid)} ETH`,
-        });
-      });
+        try {
+          const [contributed, joined, left, propCreated, voted, executed] =
+            await Promise.all([
+              fetchWithRetry(() =>
+                contract.queryFilter(contract.filters.Contributed(), from, to)
+              ),
+              fetchWithRetry(() =>
+                contract.queryFilter(contract.filters.Joined(), from, to)
+              ),
+              fetchWithRetry(() =>
+                contract.queryFilter(contract.filters.Left(), from, to)
+              ),
+              fetchWithRetry(() =>
+                contract.queryFilter(contract.filters.ProposalCreated(), from, to)
+              ),
+              fetchWithRetry(() =>
+                contract.queryFilter(contract.filters.Voted(), from, to)
+              ),
+              fetchWithRetry(() =>
+                contract.queryFilter(contract.filters.Executed(), from, to)
+              ),
+            ]);
 
-      left.forEach((e) => {
-        parsedEvents.push({
-          name: "Left",
-          blockNumber: e.blockNumber,
-          txHash: e.transactionHash,
-          details: `Member departed: ${e.args.member}. Privileges revoked.`,
-        });
-      });
+          contributed.forEach((e) => {
+            parsedEvents.push({
+              name: "Contributed",
+              blockNumber: e.blockNumber,
+              txHash: e.transactionHash,
+              details: `Inflow from ${e.args.from}: +${ethers.formatEther(e.args.amount)} ETH`,
+            });
+          });
 
-      propCreated.forEach((e) => {
-        parsedEvents.push({
-          name: "ProposalCreated",
-          blockNumber: e.blockNumber,
-          txHash: e.transactionHash,
-          details: `Proposal #${e.args.id} created by ${e.args.proposer} for ${ethers.formatEther(e.args.amount)} ETH: "${e.args.purpose}". Snapshot: ${e.args.snapshotMembers} members.`,
-        });
-      });
+          joined.forEach((e) => {
+            parsedEvents.push({
+              name: "Joined",
+              blockNumber: e.blockNumber,
+              txHash: e.transactionHash,
+              details: `New Member ${e.args.member} staked ${ethers.formatEther(e.args.feePaid)} ETH`,
+            });
+          });
 
-      voted.forEach((e) => {
-        parsedEvents.push({
-          name: "Voted",
-          blockNumber: e.blockNumber,
-          txHash: e.transactionHash,
-          details: `Voter ${e.args.voter} cast vote [${e.args.support ? "YES" : "NO"}] on Proposal #${e.args.id}`,
-        });
-      });
+          left.forEach((e) => {
+            parsedEvents.push({
+              name: "Left",
+              blockNumber: e.blockNumber,
+              txHash: e.transactionHash,
+              details: `Member departed: ${e.args.member}. Privileges revoked.`,
+            });
+          });
 
-      executed.forEach((e) => {
-        parsedEvents.push({
-          name: "Executed",
-          blockNumber: e.blockNumber,
-          txHash: e.transactionHash,
-          details: `Outflow Executed: Proposal #${e.args.id} sent ${ethers.formatEther(e.args.amount)} ETH to ${e.args.recipient} for "${e.args.purpose}"`,
-        });
-      });
+          propCreated.forEach((e) => {
+            parsedEvents.push({
+              name: "ProposalCreated",
+              blockNumber: e.blockNumber,
+              txHash: e.transactionHash,
+              details: `Proposal #${e.args.id} created by ${e.args.proposer} for ${ethers.formatEther(e.args.amount)} ETH: "${e.args.purpose}". Snapshot: ${e.args.snapshotMembers} members.`,
+            });
+          });
+
+          voted.forEach((e) => {
+            parsedEvents.push({
+              name: "Voted",
+              blockNumber: e.blockNumber,
+              txHash: e.transactionHash,
+              details: `Voter ${e.args.voter} cast vote [${e.args.support ? "YES" : "NO"}] on Proposal #${e.args.id}`,
+            });
+          });
+
+          executed.forEach((e) => {
+            parsedEvents.push({
+              name: "Executed",
+              blockNumber: e.blockNumber,
+              txHash: e.transactionHash,
+              details: `Outflow Executed: Proposal #${e.args.id} sent ${ethers.formatEther(e.args.amount)} ETH to ${e.args.recipient} for "${e.args.purpose}"`,
+            });
+          });
+        } catch (chunkErr) {
+          console.warn(`Error querying chunk ${from}-${to}:`, chunkErr);
+        }
+      }
 
       parsedEvents.sort((a, b) => b.blockNumber - a.blockNumber);
       setEvents(parsedEvents);
@@ -225,6 +290,7 @@ export default function App() {
       console.error("Failed to fetch on-chain event logs:", err);
     } finally {
       setIsLoadingEvents(false);
+      setIsLoadingOlderHistory(false);
     }
   }, []);
 
@@ -254,6 +320,7 @@ export default function App() {
             treasuryBalance={treasuryBalance}
             memberCount={memberCount}
             proposalCount={proposalCount}
+            parameters={parameters}
             account={account}
             onConnect={connectWallet}
             onNavigate={(tab) => setActiveTab(tab)}
@@ -264,6 +331,7 @@ export default function App() {
           <Membership
             account={account}
             isMember={isMember}
+            parameters={parameters}
             treasuryBalance={treasuryBalance}
             onRefresh={() => {
               loadContractData();
@@ -279,6 +347,7 @@ export default function App() {
             account={account}
             isMember={isMember}
             joinedTimestamp={joinedTimestamp}
+            parameters={parameters}
             treasuryBalance={treasuryBalance}
             onRefresh={() => {
               loadContractData();
@@ -293,6 +362,7 @@ export default function App() {
             account={account}
             isMember={isMember}
             memberCount={memberCount}
+            parameters={parameters}
             treasuryBalance={treasuryBalance}
             onRefresh={() => {
               loadContractData();
@@ -308,7 +378,9 @@ export default function App() {
         {activeTab === "ledger" && (
           <Ledger
             events={events}
+            parameters={parameters}
             isLoadingEvents={isLoadingEvents}
+            isLoadingOlderHistory={isLoadingOlderHistory}
             onRefresh={loadEvents}
           />
         )}

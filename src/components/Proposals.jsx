@@ -10,6 +10,7 @@ export default function Proposals({
   account,
   isMember,
   joinedTimestamp,
+  parameters = {},
   treasuryBalance = "0",
   onRefresh,
   onConnect,
@@ -17,6 +18,26 @@ export default function Proposals({
   const [selectedId, setSelectedId] = useState(proposals.length > 0 ? proposals[0].id : null);
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState("");
+  const [now, setNow] = React.useState(Math.floor(Date.now() / 1000));
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Math.floor(Date.now() / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatCountdown = (targetTime) => {
+    if (!targetTime) return "--";
+    const remaining = Number(targetTime) - now;
+    if (remaining <= 0) return "CONCLUDED";
+    const hours = Math.floor(remaining / 3600);
+    const minutes = Math.floor((remaining % 3600) / 60);
+    const seconds = remaining % 60;
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  };
 
   const currentProposal = proposals.find((p) => p.id === selectedId) || proposals[0];
 
@@ -105,7 +126,7 @@ export default function Proposals({
           </span>
           <span className="font-mono text-xs text-primary uppercase font-bold flex items-center gap-1">
             <span className="inline-block w-2 h-2 bg-primary" />
-            QUORUM 50%
+            QUORUM {parameters?.quorumBps ? parameters.quorumBps / 100 : 50}%
           </span>
         </div>
         <h1 className="font-headline text-4xl md:text-5xl uppercase tracking-tight text-white leading-none m-0">
@@ -171,11 +192,23 @@ export default function Proposals({
                       {p.purpose}
                     </span>
                   </div>
-                  <span
-                    className={`font-mono text-[10px] tracking-wider border px-2 py-0.5 uppercase font-bold ${badgeColor}`}
-                  >
-                    {p.statusText}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {p.statusText === "ACTIVE" && (
+                      <span className="font-mono text-[10px] text-amber-400 border border-amber-400/50 bg-amber-950/40 px-1.5 py-0.5">
+                        ⏱ {formatCountdown(p.votingEnds)}
+                      </span>
+                    )}
+                    {p.statusText === "PASSED" && (
+                      <span className="font-mono text-[10px] text-secondary border border-secondary/50 bg-secondary/10 px-1.5 py-0.5">
+                        ⏳ {formatCountdown(p.expiresAt)}
+                      </span>
+                    )}
+                    <span
+                      className={`font-mono text-[10px] tracking-wider border px-2 py-0.5 uppercase font-bold ${badgeColor}`}
+                    >
+                      {p.statusText}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between font-mono text-xs text-gray-400">
                   <span className="text-white font-medium">
@@ -202,9 +235,21 @@ export default function Proposals({
               <span className="font-mono text-xs text-primary uppercase font-bold tracking-widest">
                 // DETAIL INSPECTOR
               </span>
-              <span className="font-mono text-xs px-2 py-0.5 border border-primary text-primary font-bold uppercase">
-                {currentProposal.statusText}
-              </span>
+              <div className="flex items-center gap-2">
+                {currentProposal.statusText === "ACTIVE" && (
+                  <span className="font-mono text-xs px-2 py-0.5 border border-amber-400 text-amber-400 font-bold bg-amber-950/30">
+                    ⏱ CLOSES: {formatCountdown(currentProposal.votingEnds)}
+                  </span>
+                )}
+                {currentProposal.statusText === "PASSED" && (
+                  <span className="font-mono text-xs px-2 py-0.5 border border-secondary text-secondary font-bold bg-secondary/10">
+                    ⏳ EXPIRES: {formatCountdown(currentProposal.expiresAt)}
+                  </span>
+                )}
+                <span className="font-mono text-xs px-2 py-0.5 border border-primary text-primary font-bold uppercase">
+                  {currentProposal.statusText}
+                </span>
+              </div>
             </div>
             <h2 className="font-headline text-2xl md:text-3xl uppercase text-white leading-tight m-0">
               #{currentProposal.id.toString().padStart(3, "0")} {currentProposal.purpose}
@@ -213,6 +258,11 @@ export default function Proposals({
               <span>ALLOCATION: {ethers.formatEther(currentProposal.amount)} ETH</span>
               <span>RECIPIENT: {currentProposal.recipient}</span>
               <span>PROPOSER: {currentProposal.proposer}</span>
+            </div>
+            <div className="font-mono text-[11px] text-gray-400 uppercase flex flex-wrap gap-4 mt-1 border-t border-white/10 pt-1">
+              <span>CREATED: {new Date(Number(currentProposal.createdAt) * 1000).toLocaleString()}</span>
+              <span>VOTING ENDS: {new Date(Number(currentProposal.votingEnds) * 1000).toLocaleString()}</span>
+              <span>EXPIRES AT: {new Date(Number(currentProposal.expiresAt) * 1000).toLocaleString()}</span>
             </div>
           </div>
 
@@ -260,16 +310,25 @@ export default function Proposals({
           )}
 
           {/* Capital Deficit Alert if Passed but under-collateralized */}
-          {currentProposal.statusText === "PASSED" &&
-            (parseFloat(treasuryBalance) < parseFloat(ethers.formatEther(currentProposal.amount)) ||
-              parseFloat(ethers.formatEther(currentProposal.amount)) > parseFloat(treasuryBalance) * 0.5) && (
+          {(() => {
+            const propEth = parseFloat(ethers.formatEther(currentProposal.amount));
+            const balEth = parseFloat(treasuryBalance);
+            const maxSpendRatio = (parameters?.maxSpendBps || 5000) / 10000;
+            const maxSpendPct = (parameters?.maxSpendBps || 5000) / 100;
+            const requiredMinBalance = maxSpendRatio > 0 ? propEth / maxSpendRatio : propEth;
+            const isDeficit =
+              currentProposal.statusText === "PASSED" &&
+              (balEth < propEth || propEth > balEth * maxSpendRatio);
+
+            return isDeficit ? (
               <div className="w-full bg-amber-500/10 border-2 border-amber-500 text-amber-300 p-3 flex items-start gap-2 font-mono text-xs uppercase">
                 <span className="material-symbols-outlined text-base">warning</span>
                 <span>
-                  TREASURY NOTICE: Proposal approved by community, but requires treasury balance of at least {(parseFloat(ethers.formatEther(currentProposal.amount)) * 2).toFixed(4)} ETH to satisfy the 50% max spend ceiling. Deposit ETH to enable execution.
+                  TREASURY NOTICE: Proposal approved by community, but requires treasury balance of at least {requiredMinBalance.toFixed(4)} ETH to satisfy the {maxSpendPct}% max spend ceiling. Deposit ETH to enable execution.
                 </span>
               </div>
-            )}
+            ) : null;
+          })()}
 
           {/* Action Buttons: Vote YES / Vote NO */}
           <div className="w-full flex flex-col gap-3 pt-2">
@@ -302,7 +361,9 @@ export default function Proposals({
             {(() => {
               const propEth = parseFloat(ethers.formatEther(currentProposal.amount));
               const balEth = parseFloat(treasuryBalance);
-              const isSpendCapOk = propEth <= balEth && propEth <= balEth * 0.5;
+              const maxSpendRatio = (parameters?.maxSpendBps || 5000) / 10000;
+              const maxSpendPct = (parameters?.maxSpendBps || 5000) / 100;
+              const isSpendCapOk = propEth <= balEth && propEth <= balEth * maxSpendRatio;
               const isExecutable = currentProposal.statusText === "PASSED" && isSpendCapOk;
 
               return (
@@ -324,7 +385,7 @@ export default function Proposals({
                     : isExecutable
                     ? "EXECUTE PROPOSAL (PERMISSIONLESS)"
                     : currentProposal.statusText === "PASSED"
-                    ? "TREASURY DEFICIT (NEEDS CAPITAL FOR 50% CAP)"
+                    ? `TREASURY DEFICIT (NEEDS CAPITAL FOR ${maxSpendPct}% CAP)`
                     : currentProposal.statusText === "EXECUTED"
                     ? "PROPOSAL ALREADY EXECUTED"
                     : `CANNOT EXECUTE (STATUS: ${currentProposal.statusText})`}
