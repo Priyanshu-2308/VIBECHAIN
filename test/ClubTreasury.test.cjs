@@ -317,6 +317,21 @@ describe("ClubTreasury Contract Suite", function () {
       ).to.be.revertedWithCustomError(treasury, "MustJoinBeforeProposal");
     });
 
+    it("allows a member who joined in the same block/timestamp as proposal to vote", async function () {
+      await ethers.provider.send("evm_setAutomine", [false]);
+      const tx1 = await treasury.connect(dave).join({ value: MEMBERSHIP_FEE });
+      const tx2 = await treasury.connect(dave).propose(recipient.address, ethers.parseEther("0.5"), "Same block proposal");
+      await ethers.provider.send("evm_mine", []);
+      await ethers.provider.send("evm_setAutomine", [true]);
+      await tx1.wait();
+      await tx2.wait();
+
+      const sameBlockPropId = 2;
+      await expect(treasury.connect(dave).vote(sameBlockPropId, true))
+        .to.emit(treasury, "Voted")
+        .withArgs(sameBlockPropId, dave.address, true);
+    });
+
     it("ATTACK: member cannot double vote", async function () {
       await treasury.connect(alice).vote(proposalId, true);
       await expect(

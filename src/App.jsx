@@ -3,18 +3,20 @@ import { ethers } from "ethers";
 import Header from "./components/Header.jsx";
 import Navigation from "./components/Navigation.jsx";
 import Dashboard from "./components/Dashboard.jsx";
+import Membership from "./components/Membership.jsx";
 import Proposals from "./components/Proposals.jsx";
 import NewProposal from "./components/NewProposal.jsx";
 import Ledger from "./components/Ledger.jsx";
 import {
   getReadOnlyContract,
+  getSignerContract,
   checkAndSwitchNetwork,
   getPublicProvider,
 } from "./utils/ethereum.js";
 import contractData from "./contract.json";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("pot");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [account, setAccount] = useState("");
   const [isMember, setIsMember] = useState(false);
   const [joinedTimestamp, setJoinedTimestamp] = useState(0);
@@ -48,7 +50,7 @@ export default function App() {
     }
   };
 
-  // Check accounts on load and listen to account changes
+  // Check if already connected on load
   useEffect(() => {
     if (window.ethereum) {
       window.ethereum
@@ -76,6 +78,7 @@ export default function App() {
     if (!contract) return;
 
     try {
+      // Balance, members, proposals
       const [bal, mCount, pCount] = await Promise.all([
         contract.treasuryBalance(),
         contract.memberCount(),
@@ -87,12 +90,14 @@ export default function App() {
       const count = Number(pCount);
       setProposalCount(count);
 
+      // Load all proposals
       const propList = [];
       for (let i = 1; i <= count; i++) {
         try {
-          const [prop, st] = await Promise.all([
+          const [prop, st, userHasVoted] = await Promise.all([
             contract.getProposal(i),
             contract.status(i),
+            account ? contract.hasVoted(i, account) : Promise.resolve(false),
           ]);
           const statusLabels = ["ACTIVE", "PASSED", "REJECTED", "EXPIRED", "EXECUTED"];
           propList.push({
@@ -110,13 +115,15 @@ export default function App() {
             executed: prop.executed,
             statusCode: Number(st),
             statusText: statusLabels[Number(st)] || "UNKNOWN",
+            hasVoted: Boolean(userHasVoted),
           });
         } catch (e) {
-          console.error(`Error loading request ${i}:`, e);
+          console.error(`Error loading proposal ${i}:`, e);
         }
       }
-      setProposals(propList.reverse());
+      setProposals(propList.reverse()); // most recent first
 
+      // Check user membership
       if (account) {
         const [isM, jAt] = await Promise.all([
           contract.isMember(account),
@@ -129,11 +136,11 @@ export default function App() {
         setJoinedTimestamp(0);
       }
     } catch (err) {
-      console.error("Failed to load on-chain collective state:", err);
+      console.error("Failed to load on-chain treasury state:", err);
     }
   }, [account]);
 
-  // Load on-chain event logs for notebook
+  // Load on-chain event logs for transparency audit
   const loadEvents = useCallback(async () => {
     const contract = getReadOnlyContract();
     if (!contract) return;
@@ -142,9 +149,9 @@ export default function App() {
       setIsLoadingEvents(true);
       const provider = getPublicProvider();
       const currentBlock = await provider.getBlockNumber();
-      const fromBlock = contractData.deployBlock
-        ? Math.max(0, contractData.deployBlock)
-        : Math.max(0, currentBlock - 5000);
+      const deployBlock = contractData.deployBlock || 0;
+      // Safeguard against RPC getLogs block range limit (max ~4,500 blocks)
+      const fromBlock = Math.max(deployBlock, currentBlock > 4500 ? currentBlock - 4500 : 0);
 
       const [contributed, joined, left, propCreated, voted, executed] =
         await Promise.all([
@@ -163,7 +170,7 @@ export default function App() {
           name: "Contributed",
           blockNumber: e.blockNumber,
           txHash: e.transactionHash,
-          details: `Gift to pot from ${e.args.from}: +${ethers.formatEther(e.args.amount)} ETH`,
+          details: `Inflow from ${e.args.from}: +${ethers.formatEther(e.args.amount)} ETH`,
         });
       });
 
@@ -172,7 +179,7 @@ export default function App() {
           name: "Joined",
           blockNumber: e.blockNumber,
           txHash: e.transactionHash,
-          details: `New member seated at table: ${e.args.member} (Pledged ${ethers.formatEther(e.args.feePaid)} ETH)`,
+          details: `New Member ${e.args.member} staked ${ethers.formatEther(e.args.feePaid)} ETH`,
         });
       });
 
@@ -181,7 +188,7 @@ export default function App() {
           name: "Left",
           blockNumber: e.blockNumber,
           txHash: e.transactionHash,
-          details: `Member stepped away: ${e.args.member}`,
+          details: `Member departed: ${e.args.member}. Privileges revoked.`,
         });
       });
 
@@ -190,7 +197,7 @@ export default function App() {
           name: "ProposalCreated",
           blockNumber: e.blockNumber,
           txHash: e.transactionHash,
-          details: `Request #${e.args.id} placed by ${e.args.proposer} for ${ethers.formatEther(e.args.amount)} ETH: "${e.args.purpose}". Snapshot: ${e.args.snapshotMembers} voters.`,
+          details: `Proposal #${e.args.id} created by ${e.args.proposer} for ${ethers.formatEther(e.args.amount)} ETH: "${e.args.purpose}". Snapshot: ${e.args.snapshotMembers} members.`,
         });
       });
 
@@ -199,7 +206,7 @@ export default function App() {
           name: "Voted",
           blockNumber: e.blockNumber,
           txHash: e.transactionHash,
-          details: `Hand shown [${e.args.support ? "Yes" : "Pass"}] on Request #${e.args.id} by ${e.args.voter}`,
+          details: `Voter ${e.args.voter} cast vote [${e.args.support ? "YES" : "NO"}] on Proposal #${e.args.id}`,
         });
       });
 
@@ -208,14 +215,14 @@ export default function App() {
           name: "Executed",
           blockNumber: e.blockNumber,
           txHash: e.transactionHash,
-          details: `Settled & Released: Request #${e.args.id} sent ${ethers.formatEther(e.args.amount)} ETH to ${e.args.recipient} for "${e.args.purpose}"`,
+          details: `Outflow Executed: Proposal #${e.args.id} sent ${ethers.formatEther(e.args.amount)} ETH to ${e.args.recipient} for "${e.args.purpose}"`,
         });
       });
 
       parsedEvents.sort((a, b) => b.blockNumber - a.blockNumber);
       setEvents(parsedEvents);
     } catch (err) {
-      console.error("Failed to load notebook logs:", err);
+      console.error("Failed to fetch on-chain event logs:", err);
     } finally {
       setIsLoadingEvents(false);
     }
@@ -231,8 +238,8 @@ export default function App() {
   }, [loadContractData, loadEvents]);
 
   return (
-    <div className="min-h-screen bg-surface font-body text-on-surface antialiased flex flex-col justify-between selection:bg-secondary-container selection:text-on-secondary-container">
-      {/* Header */}
+    <div className="min-h-screen bg-surface flex flex-col antialiased selection:bg-primary selection:text-white">
+      {/* Top Fixed Header */}
       <Header
         account={account}
         isMember={isMember}
@@ -240,25 +247,33 @@ export default function App() {
         onConnect={connectWallet}
       />
 
-      {/* Main Single-Column Narrative Viewport */}
-      <main className="w-full max-w-[580px] mx-auto px-6 pt-20 pb-28 flex-1 flex flex-col items-center justify-center">
-        {activeTab === "pot" && (
+      {/* Main Content Area */}
+      <main className="flex-1 w-full pt-16 md:pt-32 max-w-6xl mx-auto">
+        {activeTab === "dashboard" && (
           <Dashboard
             treasuryBalance={treasuryBalance}
             memberCount={memberCount}
             proposalCount={proposalCount}
             account={account}
-            isMember={isMember}
             onConnect={connectWallet}
-            onRefresh={() => {
-              loadContractData();
-              loadEvents();
-            }}
             onNavigate={(tab) => setActiveTab(tab)}
           />
         )}
 
-        {activeTab === "requests" && (
+        {activeTab === "membership" && (
+          <Membership
+            account={account}
+            isMember={isMember}
+            treasuryBalance={treasuryBalance}
+            onRefresh={() => {
+              loadContractData();
+              loadEvents();
+            }}
+            onConnect={connectWallet}
+          />
+        )}
+
+        {activeTab === "proposals" && (
           <Proposals
             proposals={proposals}
             account={account}
@@ -272,7 +287,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === "new" && (
+        {activeTab === "new-allocation" && (
           <NewProposal
             account={account}
             isMember={isMember}
@@ -283,12 +298,12 @@ export default function App() {
             }}
             onConnect={connectWallet}
             onProposalCreated={() => {
-              setActiveTab("requests");
+              setActiveTab("proposals");
             }}
           />
         )}
 
-        {activeTab === "notebook" && (
+        {activeTab === "ledger" && (
           <Ledger
             events={events}
             isLoadingEvents={isLoadingEvents}
@@ -297,7 +312,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Navigation Footer */}
+      {/* Bottom (Mobile) / Secondary (Desktop) Fixed Navigation */}
       <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );

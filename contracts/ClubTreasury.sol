@@ -199,7 +199,7 @@ contract ClubTreasury is ReentrancyGuard {
         if (joinedAt[msg.sender] == 0) revert NotMember();
 
         Proposal storage p = proposals[id];
-        if (joinedAt[msg.sender] >= p.createdAt) revert MustJoinBeforeProposal();
+        if (joinedAt[msg.sender] > p.createdAt) revert MustJoinBeforeProposal();
         if (block.timestamp > p.votingEnds) revert VotingClosed();
         if (hasVoted[id][msg.sender]) revert AlreadyVoted();
 
