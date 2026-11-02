@@ -10,6 +10,7 @@ export default function Proposals({
   account,
   isMember,
   joinedTimestamp,
+  treasuryBalance = "0",
   onRefresh,
   onConnect,
 }) {
@@ -258,6 +259,18 @@ export default function Proposals({
             </div>
           )}
 
+          {/* Capital Deficit Alert if Passed but under-collateralized */}
+          {currentProposal.statusText === "PASSED" &&
+            (parseFloat(treasuryBalance) < parseFloat(ethers.formatEther(currentProposal.amount)) ||
+              parseFloat(ethers.formatEther(currentProposal.amount)) > parseFloat(treasuryBalance) * 0.5) && (
+              <div className="w-full bg-amber-500/10 border-2 border-amber-500 text-amber-300 p-3 flex items-start gap-2 font-mono text-xs uppercase">
+                <span className="material-symbols-outlined text-base">warning</span>
+                <span>
+                  TREASURY NOTICE: Proposal approved by community, but requires treasury balance of at least {(parseFloat(ethers.formatEther(currentProposal.amount)) * 2).toFixed(4)} ETH to satisfy the 50% max spend ceiling. Deposit ETH to enable execution.
+                </span>
+              </div>
+            )}
+
           {/* Action Buttons: Vote YES / Vote NO */}
           <div className="w-full flex flex-col gap-3 pt-2">
             <div className="grid grid-cols-2 gap-3 w-full">
@@ -270,7 +283,7 @@ export default function Proposals({
                     : "bg-primary text-white hover:bg-primary-dark"
                 }`}
               >
-                VOTE YES
+                {currentProposal.hasVoted ? "VOTED" : "VOTE YES"}
               </button>
               <button
                 onClick={() => handleVote(false)}
@@ -281,30 +294,43 @@ export default function Proposals({
                     : "bg-white text-ink hover:bg-gray-200"
                 }`}
               >
-                VOTE NO
+                {currentProposal.hasVoted ? "VOTED" : "VOTE NO"}
               </button>
             </div>
 
             {/* Execute Proposal Button */}
-            <button
-              onClick={handleExecute}
-              disabled={currentProposal.statusText !== "PASSED" || isLoading}
-              className={`w-full h-14 font-headline text-xl uppercase tracking-wider flex items-center justify-center transition-none border-2 ${
-                currentProposal.statusText === "PASSED"
-                  ? "bg-secondary text-white hover:bg-secondary-dark border-secondary cursor-pointer"
-                  : currentProposal.statusText === "EXECUTED"
-                  ? "bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed"
-                  : "bg-white/5 text-gray-500 border-gray-800 cursor-not-allowed"
-              }`}
-            >
-              {isLoading
-                ? "BROADCASTING EXECUTION..."
-                : currentProposal.statusText === "PASSED"
-                ? "EXECUTE PROPOSAL (PERMISSIONLESS)"
-                : currentProposal.statusText === "EXECUTED"
-                ? "PROPOSAL ALREADY EXECUTED"
-                : `CANNOT EXECUTE (STATUS: ${currentProposal.statusText})`}
-            </button>
+            {(() => {
+              const propEth = parseFloat(ethers.formatEther(currentProposal.amount));
+              const balEth = parseFloat(treasuryBalance);
+              const isSpendCapOk = propEth <= balEth && propEth <= balEth * 0.5;
+              const isExecutable = currentProposal.statusText === "PASSED" && isSpendCapOk;
+
+              return (
+                <button
+                  onClick={handleExecute}
+                  disabled={!isExecutable || isLoading}
+                  className={`w-full h-14 font-headline text-xl uppercase tracking-wider flex items-center justify-center transition-none border-2 ${
+                    isExecutable
+                      ? "bg-secondary text-white hover:bg-secondary-dark border-secondary cursor-pointer"
+                      : currentProposal.statusText === "PASSED"
+                      ? "bg-amber-900/40 text-amber-300 border-amber-600 cursor-not-allowed"
+                      : currentProposal.statusText === "EXECUTED"
+                      ? "bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed"
+                      : "bg-white/5 text-gray-500 border-gray-800 cursor-not-allowed"
+                  }`}
+                >
+                  {isLoading
+                    ? "BROADCASTING EXECUTION..."
+                    : isExecutable
+                    ? "EXECUTE PROPOSAL (PERMISSIONLESS)"
+                    : currentProposal.statusText === "PASSED"
+                    ? "TREASURY DEFICIT (NEEDS CAPITAL FOR 50% CAP)"
+                    : currentProposal.statusText === "EXECUTED"
+                    ? "PROPOSAL ALREADY EXECUTED"
+                    : `CANNOT EXECUTE (STATUS: ${currentProposal.statusText})`}
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}

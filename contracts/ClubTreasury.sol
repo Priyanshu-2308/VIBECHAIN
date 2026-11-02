@@ -84,6 +84,7 @@ contract ClubTreasury is ReentrancyGuard {
     error ProposalExpired();
     error ProposalDidNotPass();
     error QuorumNotMet();
+    error InsufficientMembers();
     error InsufficientBalance();
     error TransferFailed();
 
@@ -148,6 +149,7 @@ contract ClubTreasury is ReentrancyGuard {
         string calldata purpose
     ) external returns (uint256) {
         if (joinedAt[msg.sender] == 0) revert NotMember();
+        if (memberCount < 2) revert InsufficientMembers();
         if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
         if (amount == 0) revert InvalidAmount();
         
@@ -222,7 +224,8 @@ contract ClubTreasury is ReentrancyGuard {
         if (block.timestamp > p.expiresAt) revert ProposalExpired();
 
         if (p.yesVotes <= p.noVotes) revert ProposalDidNotPass();
-        if ((p.yesVotes * 10000) < (p.snapshotMembers * QUORUM_BPS)) revert QuorumNotMet();
+        uint256 effectiveSnapshot = memberCount < p.snapshotMembers ? memberCount : p.snapshotMembers;
+        if ((p.yesVotes * 10000) < (effectiveSnapshot * QUORUM_BPS)) revert QuorumNotMet();
 
         uint256 currentBalance = address(this).balance;
         if (p.amount > currentBalance) revert InsufficientBalance();
@@ -259,8 +262,9 @@ contract ClubTreasury is ReentrancyGuard {
             return ProposalStatus.Active;
         }
 
+        uint256 effectiveSnapshot = memberCount < p.snapshotMembers ? memberCount : p.snapshotMembers;
         bool passedVotes = p.yesVotes > p.noVotes &&
-            ((p.yesVotes * 10000) >= (p.snapshotMembers * QUORUM_BPS));
+            ((p.yesVotes * 10000) >= (effectiveSnapshot * QUORUM_BPS));
 
         if (!passedVotes) {
             return ProposalStatus.Rejected;

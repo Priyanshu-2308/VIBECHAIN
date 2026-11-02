@@ -5,6 +5,7 @@ import { getSignerContract, checkAndSwitchNetwork } from "../utils/ethereum.js";
 export default function NewProposal({
   account,
   isMember,
+  memberCount = 0,
   treasuryBalance,
   onRefresh,
   onConnect,
@@ -23,6 +24,9 @@ export default function NewProposal({
     if (!account) return onConnect();
     if (!isMember) {
       return setStatusMsg("Only active members can submit proposals. Join the club first.");
+    }
+    if (memberCount < 2) {
+      return setStatusMsg("Collective governance requires at least 2 active club members.");
     }
 
     if (!ethers.isAddress(recipient)) {
@@ -95,6 +99,16 @@ export default function NewProposal({
             <span>
               YOU ARE CURRENTLY AN OBSERVER. ONLY JOINED MEMBERS CAN DISPATCH
               PROPOSALS.
+            </span>
+          </div>
+        )}
+
+        {/* Collective governance threshold warning */}
+        {isMember && memberCount < 2 && (
+          <div className="p-4 bg-amber-500/10 border-2 border-amber-500 font-mono text-xs text-ink uppercase flex items-center gap-2">
+            <span className="material-symbols-outlined text-amber-600">group</span>
+            <span>
+              GOVERNANCE FLOOR: At least 2 active club members are required before proposals can be submitted.
             </span>
           </div>
         )}
@@ -183,14 +197,18 @@ export default function NewProposal({
           {/* Submit CTA */}
           <button
             type="submit"
-            disabled={!isMember || isLoading || purposeLen === 0 || purposeLen > 200}
+            disabled={!isMember || memberCount < 2 || isLoading || purposeLen === 0 || purposeLen > 200}
             className={`w-full h-14 font-headline text-xl uppercase tracking-wider flex items-center justify-center border-2 border-ink transition-none ${
-              !isMember || isLoading || purposeLen === 0 || purposeLen > 200
+              !isMember || memberCount < 2 || isLoading || purposeLen === 0 || purposeLen > 200
                 ? "bg-surface-variant text-gray-500 cursor-not-allowed opacity-50"
                 : "bg-primary text-white hover:bg-primary-dark cursor-pointer active:bg-ink"
             }`}
           >
-            {isLoading ? "BROADCASTING PROPOSAL..." : "SUBMIT PROPOSAL TO VOTING"}
+            {isLoading
+              ? "BROADCASTING PROPOSAL..."
+              : memberCount < 2
+              ? "AWAITING 2ND CLUB MEMBER"
+              : "SUBMIT PROPOSAL TO VOTING"}
           </button>
         </form>
       </div>

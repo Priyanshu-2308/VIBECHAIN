@@ -226,6 +226,16 @@ describe("ClubTreasury Contract Suite", function () {
       ).to.be.revertedWithCustomError(treasury, "NotMember");
     });
 
+    it("reverts propose if club has fewer than 2 members", async function () {
+      // Bob leaves, leaving only Alice (1 member)
+      await treasury.connect(bob).leave();
+      await expect(
+        treasury.connect(alice).propose(recipient.address, ethers.parseEther("1.0"), "Test")
+      ).to.be.revertedWithCustomError(treasury, "InsufficientMembers");
+      // Bob rejoins
+      await treasury.connect(bob).join({ value: MEMBERSHIP_FEE });
+    });
+
     it("reverts propose if recipient is address(0) or address(this)", async function () {
       await expect(
         treasury.connect(alice).propose(ethers.ZeroAddress, ethers.parseEther("1.0"), "Test")
@@ -436,6 +446,29 @@ describe("ClubTreasury Contract Suite", function () {
         treasury,
         "QuorumNotMet"
       );
+    });
+
+    it("allows remaining members to execute if members leave and remaining reach adjusted quorum", async function () {
+      await treasury.connect(charlie).join({ value: MEMBERSHIP_FEE });
+      await treasury.connect(dave).join({ value: MEMBERSHIP_FEE });
+      await time.increase(10);
+
+      await treasury
+        .connect(alice)
+        .propose(recipient.address, ethers.parseEther("1.0"), "Departure test");
+      const pId = 2;
+
+      await treasury.connect(alice).vote(pId, true);
+
+      // Charlie and Dave leave. Remaining active = 2 (Alice & Bob).
+      await treasury.connect(charlie).leave();
+      await treasury.connect(dave).leave();
+
+      await time.increase(VOTING_PERIOD + 1);
+
+      expect(await treasury.status(pId)).to.equal(1); // Passed
+      await expect(treasury.connect(outsider).execute(pId))
+        .to.emit(treasury, "Executed");
     });
 
     it("ATTACK: execute an expired proposal reverts", async function () {

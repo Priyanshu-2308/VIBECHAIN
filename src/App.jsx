@@ -279,6 +279,7 @@ export default function App() {
             account={account}
             isMember={isMember}
             joinedTimestamp={joinedTimestamp}
+            treasuryBalance={treasuryBalance}
             onRefresh={() => {
               loadContractData();
               loadEvents();
@@ -291,6 +292,7 @@ export default function App() {
           <NewProposal
             account={account}
             isMember={isMember}
+            memberCount={memberCount}
             treasuryBalance={treasuryBalance}
             onRefresh={() => {
               loadContractData();
